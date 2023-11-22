@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Reverse: 1999 Roll Simulator</title>
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6" crossorigin="anonymous">
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js" integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf" crossorigin="anonymous"></script>
+	<script id="worker" type="javascript/worker">
+		self.onmessage = function(e) {
+			var rateUps5 = 0;
+			var others5 = 0;
+			var atLeastOne5 = 0;
+			var c4 = [0, 0, 0, 0, 0, 0, 0];
+			var c5 = [0, 0, 0, 0, 0, 0, 0];
+			for (var i = 0; i < e.data.simulations; i++) {
+				var roll = simulateOne(e.data.rolls, e.data.pityCounter5, e.data.guaranteedRateUp5);
+				rateUps5 += roll.rateUps5;
+				others5 += roll.others5;
+				if (roll.rateUps5 > 0) {
+					c5[Math.min(roll.rateUps5 - 1, 6)] += 1;
+				}
+				if (roll.rateUps5 + roll.others5 > 0) {
+					atLeastOne5++;
+				}
+				if (i % (e.data.simulations / 50) == 0) {
+					postMessage({
+						progress: i
+					});
+				}
+			}
+			postMessage({
+				rateUps5: rateUps5,
+				others5: others5,
+				atLeastOne5: atLeastOne5,
+				c4: c4,
+				c5: c5
+			});
+		};
+
+		function simulateOne(rolls, pityCounter5, guaranteedRateUp5) {
+			var rateUps5 = 0;
+			var others5 = 0;
+			for (var i = 0; i < rolls; i++) {
+				pityCounter5++;
+
+				var diceRoll = Math.random();
+				if (diceRoll < chance5(pityCounter5)) {
+					pityCounter5 = 0;
+					if (guaranteedRateUp5 || Math.random() < 0.5) {
+						rateUps5++;
+						guaranteedRateUp5 = false;
+					} else {
+						others5++;
+						guaranteedRateUp5 = true;
+					}
+				} 
+			}
+			return {
+				rateUps5: rateUps5,
+				others5: others5
+			};
+		}
+
+		function chance5(pityCounter) {
+			if (pityCounter < 61) {
+				return 0.015;
+			} else {
+			    if (pityCounter >= 70) return 1.01;
+				else return 0.015 + (pityCounter - 60) * 0.025;
+			}
+		}
+	</script>
+
+	<script>
+		simulations = 10000;
+
+		var blob = new Blob([
+			document.querySelector('#worker').textContent
+		], { type: "text/javascript" })
+
+		var worker;
+
+		function simulate() {
+			var cleardrops = Number(document.getElementById("cleardrops").value);
+			var unilogs = Number(document.getElementById("unilogs").value);
+			var pityCounter5 = Number(document.getElementById("pity5").value);
+			if (isNaN(cleardrops) || isNaN(unilogs) || isNaN(pityCounter5)) {
+				document.getElementById("progress5").innerHTML = "<p style='color:red'>Invalid inputs</p>";
+				return;
+			}
+			var guaranteedRateUp5 = document.getElementById("guaranteed5").checked
+
+			if (worker) {
+				worker.terminate();
+			}
+			worker = new Worker(window.URL.createObjectURL(blob));
+			worker.onmessage = update;
+
+			
+			var rolls = cleardrops / 180 + unilogs;
+			worker.postMessage({
+				rolls: rolls,
+				pityCounter5: pityCounter5,
+				guaranteedRateUp5: guaranteedRateUp5,
+				simulations: simulations
+			});
+		}
+
+		function update(e) {
+			if (typeof e.data.progress !== 'undefined') {
+				document.getElementById("progress5").innerHTML = "Running simulations. Total progress: " + (e.data.progress * 100 / simulations).toFixed(0) + "%";
+				return;
+			}
+			document.getElementById("progress5").innerHTML = "Simulation complete";
+
+			var c5 = e.data.c5;
+			document.getElementById("total5").innerHTML = ((e.data.rateUps5 + e.data.others5) / simulations).toFixed(2);
+			document.getElementById("rateUp5").innerHTML = (e.data.rateUps5 / simulations).toFixed(2);
+			document.getElementById("c05").innerHTML = ((c5[0] + c5[1] + c5[2] + c5[3] + c5[4] + c5[5] + c5[6]) / simulations * 100).toFixed(1) + "%";
+			document.getElementById("c15").innerHTML = ((c5[1] + c5[2] + c5[3] + c5[4] + c5[5] + c5[6]) / simulations * 100).toFixed(1) + "%";
+			document.getElementById("c25").innerHTML = ((c5[2] + c5[3] + c5[4] + c5[5] + c5[6]) / simulations * 100).toFixed(1) + "%";
+			document.getElementById("c35").innerHTML = ((c5[3] + c5[4] + c5[5] + c5[6]) / simulations * 100).toFixed(1) + "%";
+			document.getElementById("c45").innerHTML = ((c5[4] + c5[5] + c5[6]) / simulations * 100).toFixed(1) + "%";
+			document.getElementById("c55").innerHTML = ((c5[5] + c5[6])/ simulations * 100).toFixed(1) + "%";
+		}
+	</script>
+</head>
+
+<body class="bg-light">
+<div class="container">
+<div class="col-md-4">
+    <b>Original code by konopelko - https://konopelko.github.io/genshin/</b><br>
+	<label for="cleardrops" class="form-label">Amount of clear drops</label>
+	<input type="text" class="form-control w-25" id="cleardrops" value="0">
+	<label for="unilogs" class="form-label mt-2">Amount of unilogs</label>
+	<input type="text" class="form-control w-25" id="unilogs" value="0">
+	<label for="pity5" class="form-label mt-2">6* pity counter (amount of rolls you made since your last 6*)</label>
+	<input type="text" class="form-control w-25" id="pity5" value="0">
+</div>
+<ul class="nav nav-tabs mt-4" id="myTab" role="tablist">
+</ul>
+<div class="tab-content" id="myTabContent">
+<div class="tab-pane fade show active" id="fivestar" role="tabpanel" aria-labelledby="fivestar-tab">
+	<div class="col-md-4">
+		<div class="form-check mt-2">
+			<input type="checkbox" class="form-check-input" id="guaranteed5">
+			<label class="form-check-label" for="guaranteed5">My next 6* is guaranteed to be a featured character</label>
+		</div>
+		<button type="button" class="btn btn-primary mt-2" onclick="simulate()">Simulate</button>
+		<div id="progress5" class="mt-2">This page will run 10,000 simulations</div>
+	</div>
+	<div class="col-md-6 mt-2">
+		<table class="table">
+			<thead>
+			<tr>
+				<th scope="col">Average number of 6* characters</th>
+				<th scope="col">Value</th>
+			</tr>
+			</thead>
+			<tbody>
+			<tr>
+				<th scope="row">Featured 6*</th>
+				<td id="rateUp5"></td>
+			</tr>
+			<tr>
+				<th scope="row">Any 6*</th>
+				<td id="total5"></td>
+			</tr>
+			</tbody>
+		</table>
+	</div>
+	<div class="col-md-6 mt-2">
+		<table class="table">
+			<thead>
+			<tr>
+				<th scope="col">Chance of getting a featured 6* character</th>
+				<th scope="col">Value</th>
+			</tr>
+			</thead>
+			<tbody>
+			<tr>
+				<th scope="row">P0+</th>
+				<td id="c05"></td>
+			</tr>
+			<tr>
+				<th scope="row">P1+</th>
+				<td id="c15"></td>
+			</tr>
+			<tr>
+				<th scope="row">P2+</th>
+				<td id="c25"></td>
+			</tr>
+			<tr>
+				<th scope="row">P3+</th>
+				<td id="c35"></td>
+			</tr>
+			<tr>
+				<th scope="row">P4+</th>
+				<td id="c45"></td>
+			</tr>
+			<tr>
+				<th scope="row">P5+</th>
+				<td id="c55"></td>
+			</tr>
+			</tbody>
+		</table>
+	</div>
+</div>
+</div>
+</div>
+</div>
+</body>
+</html>
